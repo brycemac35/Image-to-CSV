@@ -344,6 +344,92 @@
       opacity: 0.5;
     }
 
+    /* Debug panel */
+    .debug-panel {
+      margin-top: 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+
+    .debug-toggle {
+      width: 100%;
+      background: transparent;
+      border: none;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      transition: color 0.2s, background 0.2s;
+    }
+
+    .debug-toggle:hover { color: var(--text); background: rgba(255,255,255,0.02); }
+
+    .debug-toggle .chevron {
+      transition: transform 0.25s ease;
+      font-style: normal;
+      font-size: 9px;
+    }
+
+    .debug-panel.open .chevron { transform: rotate(180deg); }
+
+    .debug-body {
+      display: none;
+      flex-direction: column;
+      gap: 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .debug-panel.open .debug-body { display: flex; }
+
+    .debug-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      border-bottom: 1px solid rgba(34,34,38,0.6);
+      transition: background 0.15s;
+    }
+
+    .debug-row:last-child { border-bottom: none; }
+
+    .debug-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: var(--muted);
+      transition: background 0.3s;
+    }
+
+    .debug-dot.ok      { background: var(--success); box-shadow: 0 0 6px rgba(126,200,160,0.4); }
+    .debug-dot.fail    { background: var(--danger);  box-shadow: 0 0 6px rgba(224,112,112,0.4); }
+    .debug-dot.warn    { background: var(--accent);  box-shadow: 0 0 6px rgba(200,185,122,0.4); }
+
+    .debug-label {
+      font-size: 11px;
+      color: var(--muted);
+      flex: 1;
+    }
+
+    .debug-value {
+      font-size: 11px;
+      color: var(--text);
+      opacity: 0.7;
+      text-align: right;
+      max-width: 160px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     /* Fade-in animation */
     @keyframes fadeUp {
       from { opacity: 0; transform: translateY(12px); }
@@ -419,7 +505,46 @@
   </div>
 
   <footer>grayscale luminance · BT.709 coefficients</footer>
-</div>
+
+  <!-- Debug panel -->
+  <div class="debug-panel" id="debug-panel">
+    <button class="debug-toggle" id="debug-toggle" type="button">
+      <span>Diagnostics</span>
+      <span class="chevron">▼</span>
+    </button>
+    <div class="debug-body" id="debug-body">
+      <div class="debug-row">
+        <div class="debug-dot" id="dbg-dot-file"></div>
+        <span class="debug-label">Image file</span>
+        <span class="debug-value" id="dbg-val-file">No file selected</span>
+      </div>
+      <div class="debug-row">
+        <div class="debug-dot" id="dbg-dot-type"></div>
+        <span class="debug-label">File type</span>
+        <span class="debug-value" id="dbg-val-type">—</span>
+      </div>
+      <div class="debug-row">
+        <div class="debug-dot" id="dbg-dot-load"></div>
+        <span class="debug-label">Image loaded</span>
+        <span class="debug-value" id="dbg-val-load">—</span>
+      </div>
+      <div class="debug-row">
+        <div class="debug-dot" id="dbg-dot-dims"></div>
+        <span class="debug-label">Output dimensions</span>
+        <span class="debug-value" id="dbg-val-dims">—</span>
+      </div>
+      <div class="debug-row">
+        <div class="debug-dot" id="dbg-dot-canvas"></div>
+        <span class="debug-label">Canvas API</span>
+        <span class="debug-value" id="dbg-val-canvas">—</span>
+      </div>
+      <div class="debug-row">
+        <div class="debug-dot" id="dbg-dot-ready"></div>
+        <span class="debug-label">Ready to convert</span>
+        <span class="debug-value" id="dbg-val-ready">Waiting…</span>
+      </div>
+    </div>
+  </div>
 
 <canvas id="c"></canvas>
 
@@ -508,7 +633,7 @@ dropZone.addEventListener("drop", e => { e.preventDefault(); dropZone.classList.
 fileInput.addEventListener("change", async () => {
   const file = fileInput.files?.[0];
   btn.disabled = !file;
-  if (!file) { setStatus(""); dropFilename.textContent = ""; return; }
+  if (!file) { setStatus(""); dropFilename.textContent = ""; updateDebug(); return; }
 
   dropFilename.textContent = file.name;
   setStatus("Reading image…");
@@ -517,8 +642,11 @@ fileInput.addEventListener("change", async () => {
     aspect = img.height / img.width;
     syncFromWidth();
     setStatus("Ready — " + img.naturalWidth + " × " + img.naturalHeight + " px");
+    updateDebug();
   } catch (e) {
     setStatus("Error loading image.", "error");
+    dbg("load", "fail", e.message);
+    updateDebug();
     console.error(e);
   }
 });
@@ -563,7 +691,91 @@ btn.addEventListener("click", async () => {
   setStatus("✓ Downloaded " + outName, "success");
 });
 
-function fileToImage(file) {
+// Debug panel
+const debugPanel  = document.getElementById("debug-panel");
+const debugToggle = document.getElementById("debug-toggle");
+debugToggle.addEventListener("click", () => debugPanel.classList.toggle("open"));
+
+function dbg(id, state, value) {
+  const dot = document.getElementById("dbg-dot-" + id);
+  const val = document.getElementById("dbg-val-" + id);
+  if (dot) { dot.className = "debug-dot " + (state || ""); }
+  if (val && value !== undefined) val.textContent = value;
+}
+
+function checkCanvasSupport() {
+  try {
+    const test = document.createElement("canvas");
+    const ok   = !!(test.getContext && test.getContext("2d"));
+    dbg("canvas", ok ? "ok" : "fail", ok ? "Supported" : "Not supported");
+    return ok;
+  } catch(e) {
+    dbg("canvas", "fail", "Error: " + e.message);
+    return false;
+  }
+}
+
+function updateDebug() {
+  const file   = fileInput.files?.[0];
+  const w      = parseInt(wInput.value, 10);
+  const h      = parseInt(hInput.value, 10);
+  const dimsOk = w >= 1 && h >= 1 && !isNaN(w) && !isNaN(h);
+
+  // File check
+  if (file) {
+    dbg("file", "ok", file.name);
+  } else {
+    dbg("file", "fail", "No file selected");
+  }
+
+  // Type check
+  const allowed = ["image/jpeg","image/png","image/webp","image/gif","image/bmp","image/tiff"];
+  if (file) {
+    const ok = allowed.includes(file.type) || file.type.startsWith("image/");
+    dbg("type", ok ? "ok" : "warn", file.type || "unknown");
+  } else {
+    dbg("type", "", "—");
+  }
+
+  // Load check
+  if (!file) {
+    dbg("load", "", "—");
+  } else if (aspect !== null) {
+    dbg("load", "ok", "Yes — aspect " + aspect.toFixed(3));
+  } else {
+    dbg("load", "warn", "Not yet loaded");
+  }
+
+  // Dims check
+  if (!dimsOk) {
+    dbg("dims", "fail", (isNaN(w) ? "W invalid" : w < 1 ? "W < 1" : "") + (isNaN(h) ? " H invalid" : h < 1 ? " H < 1" : ""));
+  } else {
+    dbg("dims", "ok", w + " × " + h + " px");
+  }
+
+  // Ready
+  const canvasOk = true; // already checked on load
+  const ready    = !!file && aspect !== null && dimsOk && canvasOk;
+  if (ready) {
+    dbg("ready", "ok", "Yes");
+  } else {
+    const reasons = [];
+    if (!file)          reasons.push("no file");
+    if (aspect === null && file) reasons.push("image not loaded");
+    if (!dimsOk)        reasons.push("invalid dimensions");
+    dbg("ready", "fail", reasons.join(", ") || "unknown");
+  }
+}
+
+// Run canvas check once on load
+checkCanvasSupport();
+updateDebug();
+
+// Re-run debug on any relevant change
+wInput.addEventListener("input", updateDebug);
+hInput.addEventListener("input", updateDebug);
+
+
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
