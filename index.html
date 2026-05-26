@@ -10,6 +10,8 @@
     label { display:block; margin: 12px 0 6px; }
     input, button { font-size: 16px; }
     #status { margin-top: 12px; white-space: pre-wrap; }
+    #progress-container { margin-top: 12px; display: none; }
+    progress { width: 100%; height: 20px; }
   </style>
 </head>
 <body>
@@ -20,32 +22,35 @@
     <label>Image file (JPG/PNG)</label>
     <input id="file" type="file" accept="image/*" />
 
-   <label>Output size (pixels)</label>
-<div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-  <div>
-    <div style="font-size:12px; opacity:0.8;">W</div>
-    <input id="w" type="number" value="64" min="1" style="width:110px;" />
-  </div>
+    <label>Output size (pixels)</label>
+    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <div>
+        <div style="font-size:12px; opacity:0.8;">W</div>
+        <input id="w" type="number" value="64" min="1" style="width:110px;" />
+      </div>
 
-  <button
-    id="link"
-    type="button"
-    aria-pressed="true"
-    title="Lock/unlock aspect ratio"
-    style="height:38px; width:42px; border-radius:10px; border:1px solid #ccc; background:transparent; cursor:pointer;"
-  >🔗</button>
+      <button id="link" type="button" aria-pressed="true" title="Lock/unlock aspect ratio"
+        style="height:38px; width:42px; border-radius:10px; border:1px solid #ccc; background:transparent; cursor:pointer;">
+        🔗
+      </button>
 
-  <div>
-    <div style="font-size:12px; opacity:0.8;">H</div>
-    <input id="h" type="number" value="64" min="1" style="width:110px;" />
-  </div>
-</div>
+      <div>
+        <div style="font-size:12px; opacity:0.8;">H</div>
+        <input id="h" type="number" value="64" min="1" style="width:110px;" />
+      </div>
+    </div>
 
     <div style="margin-top:12px;">
       <button id="go" disabled>Convert to CSV and download</button>
     </div>
 
     <div id="status"></div>
+    
+    <!-- Progress Bar -->
+    <div id="progress-container">
+      <small id="progress-text">Converting...</small>
+      <progress id="progress" value="0" max="100"></progress>
+    </div>
   </div>
 
   <canvas id="c" style="display:none;"></canvas>
