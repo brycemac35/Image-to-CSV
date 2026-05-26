@@ -40,16 +40,13 @@ function syncFromHeight() {
   suppressSync = false;
 }
 
-function syncFromLastEdited() {
-  if (!aspect) return;
-  if (lastEdited === "h") syncFromHeight();
-  else syncFromWidth();
-}
-
 linkBtn.addEventListener("click", () => {
   isLinked = !isLinked;
   setLinkUI();
-  if (isLinked && aspect) syncFromLastEdited();
+  if (isLinked && aspect) {
+    if (lastEdited === "h") syncFromHeight();
+    else syncFromWidth();
+  }
 });
 
 wInput.addEventListener("input", () => {
@@ -65,22 +62,21 @@ hInput.addEventListener("input", () => {
 });
 
 fileInput.addEventListener("change", async () => {
-  btn.disabled = !fileInput.files?.length;
-  aspect = null;
-
   const file = fileInput.files?.[0];
-  if (!file) return;
+  btn.disabled = !file;
 
-  statusEl.textContent = "Reading image…";
+  if (!file) {
+    statusEl.textContent = "";
+    return;
+  }
+
+  statusEl.textContent = "Reading image...";
   try {
     const img = await fileToImage(file);
     aspect = img.height / img.width;
-
-    if (isLinked) syncFromLastEdited();
-
-    statusEl.textContent = "Ready.";
+    statusEl.textContent = "Image loaded. Ready to convert.";
   } catch (e) {
-    statusEl.textContent = "Could not read that image file.";
+    statusEl.textContent = "Error loading image.";
     console.error(e);
   }
 });
@@ -113,7 +109,7 @@ btn.addEventListener("click", async () => {
   ctx.clearRect(0, 0, outW, outH);
   ctx.drawImage(img, 0, 0, outW, outH);
 
-  statusEl.textContent = `Converting… (${outW}×${outH})`;
+  statusEl.textContent = `Converting… (${outW} × ${outH})`;
   progressContainer.style.display = "block";
   progressBar.value = 0;
 
@@ -125,7 +121,7 @@ btn.addEventListener("click", async () => {
   downloadText(csv, outName);
   
   progressContainer.style.display = "none";
-  statusEl.textContent = `Done! Downloaded: ${outName}`;
+  statusEl.textContent = `✅ Done! Downloaded ${outName}`;
 });
 
 function fileToImage(file) {
@@ -136,7 +132,10 @@ function fileToImage(file) {
       URL.revokeObjectURL(url);
       resolve(img);
     };
-    img.onerror = reject;
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Failed to load image"));
+    };
     img.src = url;
   });
 }
@@ -144,7 +143,6 @@ function fileToImage(file) {
 function imageDataToGrayCsv(imageData, width, height) {
   const { data } = imageData;
   const lines = [];
-  const total = height;
 
   for (let y = 0; y < height; y++) {
     const row = [];
@@ -158,8 +156,8 @@ function imageDataToGrayCsv(imageData, width, height) {
     }
     lines.push(row.join(","));
 
-    // Update progress
-    if (y % 8 === 0 || y === height - 1) {
+    // Progress update
+    if (y % 10 === 0 || y === height - 1) {
       const progress = Math.round(((y + 1) / height) * 100);
       progressBar.value = progress;
       progressText.textContent = `Converting... ${progress}%`;
