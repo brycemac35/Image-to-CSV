@@ -112,14 +112,16 @@ btn.addEventListener("click", async () => {
   statusEl.textContent = `Converting… (${outW} × ${outH})`;
   progressContainer.style.display = "block";
   progressBar.value = 0;
+  progressText.textContent = "Converting... 0%";
 
   const imageData = ctx.getImageData(0, 0, outW, outH);
-  const csv = imageDataToGrayCsv(imageData, outW, outH);
+  btn.disabled = true;
+  const csv = await imageDataToGrayCsv(imageData, outW, outH);
+  btn.disabled = false;
 
   const outName = (file.name.replace(/\.[^.]+$/, "") || "image") + `_${outW}x${outH}.csv`;
-
   downloadText(csv, outName);
-  
+
   progressContainer.style.display = "none";
   statusEl.textContent = `✅ Done! Downloaded ${outName}`;
 });
@@ -140,9 +142,10 @@ function fileToImage(file) {
   });
 }
 
-function imageDataToGrayCsv(imageData, width, height) {
+async function imageDataToGrayCsv(imageData, width, height) {
   const { data } = imageData;
   const lines = [];
+  const CHUNK = 50; // rows per chunk before yielding to the browser
 
   for (let y = 0; y < height; y++) {
     const row = [];
@@ -156,11 +159,11 @@ function imageDataToGrayCsv(imageData, width, height) {
     }
     lines.push(row.join(","));
 
-    // Progress update
-    if (y % 10 === 0 || y === height - 1) {
+    if (y % CHUNK === 0 || y === height - 1) {
       const progress = Math.round(((y + 1) / height) * 100);
       progressBar.value = progress;
       progressText.textContent = `Converting... ${progress}%`;
+      await new Promise(r => setTimeout(r, 0)); // yield to browser so it can repaint
     }
   }
   return lines.join("\n");
