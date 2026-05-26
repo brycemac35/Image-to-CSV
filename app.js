@@ -20,12 +20,70 @@ let lastEdited = "w";
 function setLinkUI() {
   linkBtn.setAttribute("aria-pressed", String(isLinked));
   linkBtn.textContent = isLinked ? "🔗" : "⛓️";
+  linkBtn.title = isLinked ? "Aspect ratio locked" : "Aspect ratio unlocked";
 }
 setLinkUI();
 
-// ... (keep all your existing sync functions: syncFromWidth, syncFromHeight, etc.)
+function syncFromWidth() {
+  if (suppressSync || !aspect) return;
+  const w = Math.max(1, parseInt(wInput.value || "1", 10));
+  suppressSync = true;
+  hInput.value = String(Math.max(1, Math.round(w * aspect)));
+  suppressSync = false;
+}
 
-// Keep your existing fileInput and linkBtn listeners unchanged...
+function syncFromHeight() {
+  if (suppressSync || !aspect) return;
+  const h = Math.max(1, parseInt(hInput.value || "1", 10));
+  suppressSync = true;
+  wInput.value = String(Math.max(1, Math.round(h / aspect)));
+  suppressSync = false;
+}
+
+function syncFromLastEdited() {
+  if (!aspect) return;
+  if (lastEdited === "h") syncFromHeight();
+  else syncFromWidth();
+}
+
+linkBtn.addEventListener("click", () => {
+  isLinked = !isLinked;
+  setLinkUI();
+  if (isLinked && aspect) syncFromLastEdited();
+});
+
+wInput.addEventListener("input", () => {
+  if (suppressSync) return;
+  lastEdited = "w";
+  if (isLinked && aspect) syncFromWidth();
+});
+
+hInput.addEventListener("input", () => {
+  if (suppressSync) return;
+  lastEdited = "h";
+  if (isLinked && aspect) syncFromHeight();
+});
+
+fileInput.addEventListener("change", async () => {
+  btn.disabled = !fileInput.files?.length;
+  aspect = null;
+
+  const file = fileInput.files?.[0];
+  if (!file) return;
+
+  statusEl.textContent = "Reading image…";
+  try {
+    const img = await fileToImage(file);
+    aspect = img.height / img.width;
+
+    if (isLinked) syncFromLastEdited();
+
+    statusEl.textContent = "Ready.";
+  } catch (e) {
+    statusEl.textContent = "Could not read that image file.";
+    console.error(e);
+  }
+});
 
 btn.addEventListener("click", async () => {
   const file = fileInput.files?.[0];
@@ -60,7 +118,7 @@ btn.addEventListener("click", async () => {
   progressBar.value = 0;
 
   const imageData = ctx.getImageData(0, 0, outW, outH);
-  const csv = imageDataToGrayCsv(imageData, outW, outH);   // ← updated with progress
+  const csv = imageDataToGrayCsv(imageData, outW, outH);
 
   const outName = (file.name.replace(/\.[^.]+$/, "") || "image") + `_${outW}x${outH}.csv`;
 
@@ -70,10 +128,23 @@ btn.addEventListener("click", async () => {
   statusEl.textContent = `Done! Downloaded: ${outName}`;
 });
 
+function fileToImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
 function imageDataToGrayCsv(imageData, width, height) {
   const { data } = imageData;
   const lines = [];
-  const totalPixels = width * height;
+  const total = height;
 
   for (let y = 0; y < height; y++) {
     const row = [];
@@ -82,13 +153,12 @@ function imageDataToGrayCsv(imageData, width, height) {
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
-
       const gray = Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
       row.push(String(gray));
     }
     lines.push(row.join(","));
 
-    // Update progress every row
+    // Update progress
     if (y % 8 === 0 || y === height - 1) {
       const progress = Math.round(((y + 1) / height) * 100);
       progressBar.value = progress;
@@ -98,4 +168,13 @@ function imageDataToGrayCsv(imageData, width, height) {
   return lines.join("\n");
 }
 
-// Keep your existing fileToImage() and downloadText() functions
+function downloadText(text, filename) {
+  const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
